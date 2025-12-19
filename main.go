@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +18,7 @@ func main() {
 	duration := flag.Duration("duration", 1*time.Hour, "Duration for the operation")
 	qps := flag.Float64("qps", 200, "Kubernetes client QPS")
 	burst := flag.Int("burst", 200, "Kubernetes client Burst")
+	retries := flag.Int("retries", 1, "Number of retries for Kubernetes client operations")
 
 	flag.Parse()
 
@@ -54,7 +56,7 @@ func main() {
 	var errs []error
 	for _, ns := range namespaceList.Items {
 		fmt.Printf("Namespace: %s\n", ns.Name)
-		if err := cleanupEvents(ctx, clientset, ns.Name, *duration); err != nil {
+		if err := cleanupEvents(ctx, clientset, ns.Name, *duration, *retries); err != nil {
 			errs = append(errs, fmt.Errorf("error cleaning up events in namespace %s: %w", ns.Name, err))
 		}
 	}
@@ -67,10 +69,15 @@ func main() {
 	fmt.Printf("Cleanup completed successfully.\n")
 }
 
-func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespace string, duration time.Duration) error {
+func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespace string, duration time.Duration, retries int) error {
 	eventsClient := clientset.CoreV1().Events(namespace)
+	var eventsList *corev1.EventList
 	eventsList, err := eventsClient.List(ctx, metav1.ListOptions{})
-	if err != nil {
+	if opWithRetries(func() error {
+		var listErr error
+		eventsList, listErr = eventsClient.List(ctx, metav1.ListOptions{})
+		return listErr
+	}, retries); err != nil {
 		return fmt.Errorf("error listing events: %w", err)
 	}
 
@@ -85,11 +92,14 @@ func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	}
 
 	if len(toDelete) == 0 {
+		fmt.Printf("No events to delete in namespace %s (total: %d events)\n", namespace, len(eventsList.Items))
 		return nil
 	}
 	fmt.Printf("Found %d events to delete in namespace %s (total: %d events)\n", len(toDelete), namespace, len(eventsList.Items))
 	for i, eventName := range toDelete {
-		if err := eventsClient.Delete(ctx, eventName, metav1.DeleteOptions{}); err != nil {
+		if err := opWithRetries(func() error {
+			return eventsClient.Delete(ctx, eventName, metav1.DeleteOptions{})
+		}, retries); err != nil {
 			return fmt.Errorf("error deleting event %s: %w", eventName, err)
 		}
 		if (i+1)%500 == 0 {
@@ -98,4 +108,16 @@ func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	}
 	fmt.Printf("Deleted %d events in namespace %s\n", len(toDelete), namespace)
 	return nil
+}
+
+func opWithRetries(op func() error, retries int) error {
+	var err error
+	for i := 0; i <= retries; i++ {
+		err = op()
+		if err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(i+1) * 50 * time.Millisecond)
+	}
+	return err
 }
