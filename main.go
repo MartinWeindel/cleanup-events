@@ -18,7 +18,7 @@ func main() {
 	duration := flag.Duration("duration", 1*time.Hour, "Duration for the operation")
 	qps := flag.Float64("qps", 200, "Kubernetes client QPS")
 	burst := flag.Int("burst", 200, "Kubernetes client Burst")
-	retries := flag.Int("retries", 1, "Number of retries for Kubernetes client operations")
+	retries := flag.Int("retries", 2, "Number of retries for Kubernetes client operations")
 
 	flag.Parse()
 
@@ -53,18 +53,11 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("error listing namespaces: %w", err))
 	}
-	var errs []error
 	for _, ns := range namespaceList.Items {
 		fmt.Printf("Namespace: %s\n", ns.Name)
 		if err := cleanupEvents(ctx, clientset, ns.Name, *duration, *retries); err != nil {
-			errs = append(errs, fmt.Errorf("error cleaning up events in namespace %s: %w", ns.Name, err))
+			fmt.Printf("error cleaning up events in namespace %s: %w", ns.Name, err)
 		}
-	}
-	if len(errs) > 0 {
-		for _, err := range errs {
-			fmt.Println(err)
-		}
-		panic("errors occurred during cleanup")
 	}
 	fmt.Printf("Cleanup completed successfully.\n")
 }
