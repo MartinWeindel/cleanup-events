@@ -79,10 +79,13 @@ func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	if len(toDelete) == 0 {
 		return nil
 	}
-	fmt.Printf("Found %d events to delete in namespace %s\n", len(toDelete), namespace)
-	for _, eventName := range toDelete {
+	fmt.Printf("Found %d/%d events to delete in namespace %s\n", len(toDelete), len(eventsList.Items), namespace)
+	for i, eventName := range toDelete {
 		if err := eventsClient.Delete(ctx, eventName, metav1.DeleteOptions{}); err != nil {
 			return fmt.Errorf("error deleting event %s: %w", eventName, err)
+		}
+		if (i+1)%500 == 0 {
+			fmt.Printf("  Deleted %d/%d events in namespace %s\n", i+1, len(toDelete), namespace)
 		}
 	}
 	fmt.Printf("Deleted %d events in namespace %s\n", len(toDelete), namespace)
