@@ -15,6 +15,8 @@ import (
 func main() {
 	kubeconfig := flag.String("kubeconfig", "", "Path to the kubeconfig file. If not specified, KUBECONFIG env variable is used.")
 	duration := flag.Duration("duration", 1*time.Hour, "Duration for the operation")
+	qps := flag.Float64("qps", 200, "Kubernetes client QPS")
+	burst := flag.Int("burst", 200, "Kubernetes client Burst")
 
 	flag.Parse()
 
@@ -33,6 +35,10 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
+
+	// Increase QPS and Burst to handle large number of requests
+	config.QPS = float32(*qps)
+	config.Burst = *burst
 
 	// Create the clientset
 	clientset, err := kubernetes.NewForConfig(config)
@@ -79,7 +85,7 @@ func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	if len(toDelete) == 0 {
 		return nil
 	}
-	fmt.Printf("Found %d/%d events to delete in namespace %s\n", len(toDelete), len(eventsList.Items), namespace)
+	fmt.Printf("Found %d events to delete in namespace %s (total: %d events)\n", len(toDelete), namespace, len(eventsList.Items))
 	for i, eventName := range toDelete {
 		if err := eventsClient.Delete(ctx, eventName, metav1.DeleteOptions{}); err != nil {
 			return fmt.Errorf("error deleting event %s: %w", eventName, err)
