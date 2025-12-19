@@ -77,7 +77,9 @@ func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	cutoffTime := time.Now().Add(-duration)
 	var toDelete []string
 	for _, event := range eventsList.Items {
-		if event.LastTimestamp.Time.Before(cutoffTime) {
+		if event.CreationTimestamp.Time.Before(cutoffTime) && event.LastTimestamp.Time.IsZero() {
+			toDelete = append(toDelete, event.Name)
+		} else if event.LastTimestamp.Time.Before(cutoffTime) {
 			toDelete = append(toDelete, event.Name)
 		}
 	}
