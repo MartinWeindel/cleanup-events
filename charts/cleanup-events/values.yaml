@@ -1,0 +1,11 @@
+---
+image:
+  repository: ghcr.io/martinweindel/cleanup-events/cleanup-events
+  tag: latest
+  pullPolicy: Always
+
+name: cleanup-events-job
+fullname: cleanup-events-job
+
+duration: "1h"
+dryRun: false

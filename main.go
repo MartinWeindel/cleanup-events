@@ -8,9 +8,10 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Config struct {
@@ -33,7 +34,7 @@ func main() {
 	cfg := &Config{
 		Statistics: &Statistics{},
 	}
-	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", "", "Path to the kubeconfig file. If not specified, KUBECONFIG env variable is used.")
+	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", "", "Path to the kubeconfig file. If not specified, KUBECONFIG env variable is used. Use 'in-cluster' for in-cluster configuration.")
 	flag.DurationVar(&cfg.Duration, "duration", 1*time.Hour, "Duration for the operation")
 	flag.Float64Var(&cfg.QPS, "qps", 200, "Kubernetes client QPS")
 	flag.IntVar(&cfg.Burst, "burst", 50, "Kubernetes client Burst")
@@ -41,8 +42,8 @@ func main() {
 	flag.BoolVar(&cfg.DryRun, "dry-run", false, "If true, no changes will be made")
 	flag.Parse()
 
-	if cfg.Duration <= 30*time.Second {
-		panic("duration must be greater than 30 seconds")
+	if cfg.Duration < 30*time.Second {
+		panic("duration must be greater or equal than 30 seconds")
 	}
 	fmt.Printf("Starting cleanup of events older than %s\n", cfg.Duration.String())
 	if cfg.DryRun {
@@ -89,14 +90,23 @@ func cleanupAllEvents(ctx context.Context, clientset *kubernetes.Clientset, cfg 
 }
 
 func createClientSet(cfg *Config) (*kubernetes.Clientset, error) {
-	if cfg.Kubeconfig == "" {
-		cfg.Kubeconfig = os.Getenv("KUBECONFIG")
-		if cfg.Kubeconfig == "" {
-			panic("kubeconfig must be specified either via flag or KUBECONFIG env variable")
-		}
+	kubeconfig := cfg.Kubeconfig
+	if kubeconfig == "" {
+		kubeconfig = os.Getenv("KUBECONFIG")
 	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", cfg.Kubeconfig)
+	var config *rest.Config
+	var err error
+	if kubeconfig == "in-cluster" {
+		fmt.Printf("Using in-cluster configuration\n")
+		config, err = rest.InClusterConfig()
+	} else if kubeconfig == "" {
+		fmt.Printf("KUBECONFIG not specified, trying in-cluster configuration\n")
+		config, err = rest.InClusterConfig()
+	} else {
+		fmt.Printf("Using kubeconfig: %s\n", kubeconfig)
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	}
 	if err != nil {
 		panic(err.Error())
 	}

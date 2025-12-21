@@ -36,4 +36,12 @@ Usage of cleanup-events:
         Number of retries for Kubernetes client operations (default 2)
 ```
 
+## Deploy as job in a Kubernetes Cluster
 
+You can deploy the cleanup-events utility as a job in a Kubernetes cluster.
+
+For example, using dry-run and a duration of 30 minutes:
+
+```bash
+helm template charts/cleanup-events -n kube-system --set duration=30m --set dryRun=true |kubectl create -f -
+```
