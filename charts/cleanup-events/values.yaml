@@ -6,6 +6,7 @@ image:
 
 name: cleanup-events-job
 fullname: cleanup-events-job
+restartPolicy: OnFailure
 
 duration: "1h"
 dryRun: false

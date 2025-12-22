@@ -17,7 +17,7 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ .Values.fullname }}
-      restartPolicy: Never
+      restartPolicy: {{ .Values.restartPolicy }}
       containers:
         - name: cleanup-events
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
