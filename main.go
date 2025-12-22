@@ -8,6 +8,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -151,7 +152,11 @@ func cleanupEvents(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	}
 	for i, eventName := range toDelete {
 		if err := opWithRetries(func() error {
-			return eventsClient.Delete(ctx, eventName, metav1.DeleteOptions{})
+			err := eventsClient.Delete(ctx, eventName, metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			return nil
 		}, cfg.Retries); err != nil {
 			return fmt.Errorf("error deleting event %s: %w", eventName, err)
 		}
